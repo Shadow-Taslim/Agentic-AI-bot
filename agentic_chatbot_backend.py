@@ -131,6 +131,49 @@ def get_supabase_client() -> Optional["Client"]:
 supabase_client = get_supabase_client()
 
 
+def save_chat_message(thread_id: str, role: str, content: str) -> bool:
+    """
+    Persists a single chat message to the Supabase `chat_messages` table
+    via the REST client. No-op (returns False) when Supabase REST
+    credentials are not configured.
+
+    Run supabase_schema.sql in your Supabase SQL editor once to create
+    the table.
+    """
+    if supabase_client is None:
+        return False
+    try:
+        supabase_client.table("chat_messages").insert(
+            {"thread_id": thread_id, "role": role, "content": content}
+        ).execute()
+        return True
+    except Exception as exc:
+        logger.error(f"Failed to save message to Supabase chat_messages table: {exc}")
+        return False
+
+
+def fetch_chat_messages(thread_id: str, limit: int = 100) -> List[dict]:
+    """
+    Fetches stored messages for a thread from the Supabase `chat_messages`
+    table, oldest first. Returns [] when Supabase is not configured.
+    """
+    if supabase_client is None:
+        return []
+    try:
+        response = (
+            supabase_client.table("chat_messages")
+            .select("role, content, created_at")
+            .eq("thread_id", thread_id)
+            .order("created_at", desc=False)
+            .limit(limit)
+            .execute()
+        )
+        return response.data or []
+    except Exception as exc:
+        logger.error(f"Failed to fetch messages from Supabase: {exc}")
+        return []
+
+
 # ---------------------------------------------------------------------------
 # 4. State Definition & LangGraph Workflow
 # ---------------------------------------------------------------------------
@@ -187,7 +230,12 @@ def invoke_chatbot(user_message: str, thread_id: str = "default_thread") -> str:
     input_data = {"messages": [HumanMessage(content=user_message)]}
     result = chatbot.invoke(input_data, config=config)
     last_message = result["messages"][-1]
-    return _content_to_text(last_message.content)
+    reply_text = _content_to_text(last_message.content)
+
+    # Log the exchange to Supabase (no-op if not configured)
+    save_chat_message(thread_id, "user", user_message)
+    save_chat_message(thread_id, "assistant", reply_text)
+    return reply_text
 
 
 def stream_chatbot(
@@ -200,12 +248,16 @@ def stream_chatbot(
     config = {"configurable": {"thread_id": thread_id}}
     input_data = {"messages": [HumanMessage(content=user_message)]}
 
+    save_chat_message(thread_id, "user", user_message)
+    collected: List[str] = []
     for event in chatbot.stream(input_data, config=config, stream_mode="messages"):
         msg, metadata = event
         if isinstance(msg, AIMessage) and msg.content:
             text = _content_to_text(msg.content)
             if text:
+                collected.append(text)
                 yield text
+    save_chat_message(thread_id, "assistant", "".join(collected))
 
 
 def get_chat_history(thread_id: str = "default_thread") -> List[BaseMessage]:
