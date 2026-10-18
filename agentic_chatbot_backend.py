@@ -156,6 +156,28 @@ chatbot = workflow.compile(checkpointer=checkpointer)
 # ---------------------------------------------------------------------------
 # 5. Exported Functions for Frontend (Streamlit / app.py / API)
 # ---------------------------------------------------------------------------
+def _content_to_text(content) -> str:
+    """
+    Normalizes message content to plain text.
+
+    Gemini (and some other providers) stream chunks whose `content` is a
+    list of content blocks, e.g. [{'type': 'text', 'text': '...'}], instead
+    of a plain string. Yielding that list directly breaks Streamlit's
+    `st.write_stream`, so we flatten it here.
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict):
+                parts.append(block.get("text", ""))
+        return "".join(parts)
+    return str(content)
+
+
 def invoke_chatbot(user_message: str, thread_id: str = "default_thread") -> str:
     """
     Invokes the chatbot synchronously with session persistence.
@@ -165,7 +187,7 @@ def invoke_chatbot(user_message: str, thread_id: str = "default_thread") -> str:
     input_data = {"messages": [HumanMessage(content=user_message)]}
     result = chatbot.invoke(input_data, config=config)
     last_message = result["messages"][-1]
-    return last_message.content
+    return _content_to_text(last_message.content)
 
 
 def stream_chatbot(
@@ -181,7 +203,9 @@ def stream_chatbot(
     for event in chatbot.stream(input_data, config=config, stream_mode="messages"):
         msg, metadata = event
         if isinstance(msg, AIMessage) and msg.content:
-            yield msg.content
+            text = _content_to_text(msg.content)
+            if text:
+                yield text
 
 
 def get_chat_history(thread_id: str = "default_thread") -> List[BaseMessage]:
@@ -207,9 +231,9 @@ if __name__ == "__main__":
 
     test_thread = "cli-test-supabase-thread"
     print("Testing conversation flow:")
-    
+
     reply1 = invoke_chatbot("Hello! I am planning a trip to Tokyo.", thread_id=test_thread)
     print("AI (Turn 1):", reply1)
-    
+
     reply2 = invoke_chatbot("Where did I say I was planning to travel?", thread_id=test_thread)
     print("AI (Turn 2):", reply2)
