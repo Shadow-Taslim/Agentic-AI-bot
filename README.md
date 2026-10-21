@@ -8,6 +8,7 @@ A stateful, multi-turn AI chatbot backend built with **LangGraph**, **Google Gem
 
 - **LangGraph Stateful Graph**: Employs a stateful graph architecture with `ChatState` and message reducers (`add_messages`) to manage conversational context.
 - **Supabase PostgreSQL Persistence**: Uses `langgraph-checkpoint-postgres` with connection pooling (`psycopg_pool`) to persist conversation threads permanently across restarts.
+- **Supabase REST Chat Logging**: Every user/assistant exchange is logged to a `chat_messages` table via the Supabase REST client (see `supabase_schema.sql`).
 - **Graceful In-Memory Fallback**: Automatically falls back to in-memory storage (`MemorySaver`) if Supabase is not configured, enabling zero-friction local development.
 - **Multi-Model Support**: Primary support for Google Gemini (`gemini-2.5-flash`), with built-in fallback to OpenAI (`gpt-4o-mini`).
 - **Streaming Response**: Yields token-by-token chunks compatible with Streamlit (`st.write_stream`) and web interfaces.
@@ -22,7 +23,9 @@ AgenticAi/
 ├── agentic_chatbot_backend.py   # Core LangGraph graph, LLM routing, and Supabase checkpointer
 ├── app.py                       # Streamlit web frontend interface
 ├── chatbot_workflow.ipynb       # Interactive prototyping notebook for graph experimentation
-├── .env                         # Environment variables and API keys
+├── supabase_schema.sql          # One-time SQL: chat_messages table + index + RLS policies
+├── .env.example                 # Environment variable template (copy to .env)
+├── .env                         # Environment variables and API keys (never commit!)
 └── README.md                    # Project documentation
 ```
 
@@ -55,7 +58,7 @@ pip install langgraph-checkpoint-postgres "psycopg[binary,pool]" supabase
 
 ## Configuration (`.env`)
 
-Create or update your `.env` file in the project root with your credentials:
+Copy `.env.example` to `.env` and fill in your credentials:
 
 ```env
 # -----------------------------------------------
@@ -66,16 +69,23 @@ GEMINI_API_KEY="your-google-gemini-api-key"
 OPENAI_API_KEY="your-openai-api-key"
 
 # -----------------------------------------------
-# 2. Supabase PostgreSQL Persistence (Optional)
+# 2. Supabase REST API (chat_messages logging)
+# -----------------------------------------------
+# Both naming styles are accepted by the backend.
+SUPABASE_URL="https://[PROJECT-REF].supabase.co"
+SUPABASE_KEY="your-publishable-or-service-role-key"
+# NEXT_PUBLIC_SUPABASE_URL="https://[PROJECT-REF].supabase.co"
+# NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="sb_publishable_xxxx"
+
+# -----------------------------------------------
+# 3. Supabase PostgreSQL Persistence (Optional)
 # -----------------------------------------------
 # Find this in your Supabase Dashboard:
 # Project Settings -> Database -> Connection string -> URI
 SUPABASE_DB_URL="postgresql://postgres:[PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres"
-
-# Optional: Supabase REST API credentials (for auth or custom tables)
-SUPABASE_URL="https://[PROJECT-REF].supabase.co"
-SUPABASE_KEY="your-supabase-anon-or-service-key"
 ```
+
+Then run `supabase_schema.sql` once in the Supabase Dashboard (SQL Editor) to create the `chat_messages` table.
 
 > **Note**: If `SUPABASE_DB_URL` is omitted, the backend will automatically use in-memory `MemorySaver()`. No setup is blocked if you just want to test locally!
 
@@ -123,13 +133,15 @@ jupyter notebook chatbot_workflow.ipynb
 
 ## Backend API Reference
 
-[agentic_chatbot_backend.py](file:///c:/Users/User/Desktop/AgenticAi/agentic_chatbot_backend.py) exports clean helper functions:
+`agentic_chatbot_backend.py` exports clean helper functions:
 
 | Function | Description |
 | :--- | :--- |
 | `invoke_chatbot(user_message, thread_id)` | Executes the graph synchronously and returns the AI reply text. |
 | `stream_chatbot(user_message, thread_id)` | Yields streaming text chunks token-by-token. |
 | `get_chat_history(thread_id)` | Fetches the list of all messages (`HumanMessage`, `AIMessage`) stored for a session. |
+| `save_chat_message(thread_id, role, content)` | Logs one message to the Supabase `chat_messages` table (no-op if not configured). |
+| `fetch_chat_messages(thread_id, limit)` | Reads stored messages for a thread back from Supabase, oldest first. |
 | `get_supabase_client()` | Returns an authenticated Supabase REST client instance (if configured). |
 | `get_llm(model_provider)` | Returns the initialized LangChain chat model. |
 
