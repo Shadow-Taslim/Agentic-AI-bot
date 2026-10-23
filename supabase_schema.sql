@@ -1,6 +1,7 @@
 -- ============================================================================
 -- Supabase schema for the Agentic AI Chatbot
 -- Run this ONCE in: Supabase Dashboard -> SQL Editor -> New query
+-- (Safe to re-run: every statement is idempotent.)
 -- ============================================================================
 
 -- 1. Chat message log table (written by agentic_chatbot_backend.py)
@@ -21,8 +22,11 @@ alter table public.chat_messages enable row level security;
 
 -- Option A (quick demo / coursework): service-role key bypasses RLS entirely,
 -- so with SUPABASE_SERVICE_ROLE_KEY in .env no policy is strictly required.
--- For an anon key, allow full access (NOT for production):
-create policy if not exists "anon full access demo"
+-- For an anon/publishable key, allow full access (NOT for production).
+-- NOTE: PostgreSQL has no CREATE POLICY IF NOT EXISTS, so drop first --
+-- this makes the script safe to re-run any number of times.
+drop policy if exists "anon full access demo" on public.chat_messages;
+create policy "anon full access demo"
     on public.chat_messages
     for all
     to anon
