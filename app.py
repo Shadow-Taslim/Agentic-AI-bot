@@ -8,6 +8,7 @@ Requires the backend module (agentic_chatbot_backend.py) and a valid
 GEMINI_API_KEY or OPENAI_API_KEY in your .env file.
 """
 
+import os
 import uuid
 
 import streamlit as st
@@ -21,28 +22,44 @@ st.set_page_config(
     layout="centered",
 )
 
+# Bridge Streamlit Cloud secrets (st.secrets) into environment variables so
+# the backend picks them up exactly like a local .env file.
+try:
+    for _key, _value in st.secrets.items():
+        if isinstance(_value, str):
+            os.environ.setdefault(_key, _value)
+except Exception:
+    pass  # No secrets configured locally — .env is enough
+
 st.title("\U0001f916 Agentic AI Chatbot")
 st.caption("LangGraph + Gemini/OpenAI with Supabase-backed persistent memory")
 
 
 # ---------------------------------------------------------------------------
-# Backend import (graceful failure if API keys are missing)
+# Backend import + configuration check
 # ---------------------------------------------------------------------------
 backend_error = None
 try:
+    import agentic_chatbot_backend as backend
     from agentic_chatbot_backend import (
         get_chat_history,
         invoke_chatbot,
         stream_chatbot,
     )
-except Exception as exc:  # e.g. missing API key raised at import time
+except Exception as exc:  # e.g. missing dependency or database driver
     backend_error = exc
+
+if backend_error is None and backend.llm is None:
+    backend_error = ValueError(
+        "No valid API key found. Please set GEMINI_API_KEY or OPENAI_API_KEY."
+    )
 
 if backend_error is not None:
     st.error(
         "**Chatbot backend failed to start.**\n\n"
         f"`{backend_error}`\n\n"
-        "Fix: create a `.env` file in the project folder with at least one key:\n\n"
+        "Fix: create a `.env` file in the project folder with at least one key "
+        "(or add it to Streamlit secrets when deploying):\n\n"
         "```env\nGEMINI_API_KEY=your-google-gemini-api-key\n"
         "# or\nOPENAI_API_KEY=your-openai-api-key\n```"
     )
@@ -107,7 +124,7 @@ if prompt := st.chat_input("Ask me anything..."):
                 stream_chatbot(prompt, thread_id=st.session_state.thread_id)
             )
         except Exception:
-            # Streaming can fail mid-flight (rate limits, network) -- retry sync
+            # Streaming can fail mid-flight (rate limits, network) — retry sync
             reply = invoke_chatbot(prompt, thread_id=st.session_state.thread_id)
             st.markdown(reply)
 

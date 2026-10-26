@@ -13,6 +13,7 @@ A stateful, multi-turn AI chatbot backend built with **LangGraph**, **Google Gem
 - **Multi-Model Support**: Primary support for Google Gemini (`gemini-2.5-flash`), with built-in fallback to OpenAI (`gpt-4o-mini`).
 - **Streaming Response**: Yields token-by-token chunks compatible with Streamlit (`st.write_stream`) and web interfaces.
 - **Multi-Turn Session Memory**: Thread-based conversation tracking (`thread_id`), allowing separate user sessions to maintain their individual histories.
+- **Safe Startup**: Importing the backend never crashes on missing API keys; a clear error is raised only when a chat call is made without configuration.
 
 ---
 
@@ -24,8 +25,10 @@ AgenticAi/
 ├── app.py                       # Streamlit web frontend interface
 ├── chatbot_workflow.ipynb       # Interactive prototyping notebook for graph experimentation
 ├── supabase_schema.sql          # One-time SQL: chat_messages table + index + RLS policies
+├── tests/test_backend.py        # Unit tests (no API keys or network required)
 ├── .env.example                 # Environment variable template (copy to .env)
 ├── .env                         # Environment variables and API keys (never commit!)
+├── LICENSE                      # MIT License
 └── README.md                    # Project documentation
 ```
 
@@ -129,6 +132,29 @@ To test individual LangGraph nodes or experiment with new graph states:
 jupyter notebook chatbot_workflow.ipynb
 ```
 
+### 4. Run the Unit Tests
+
+The test suite needs **no API keys and no network** — it covers content
+normalization, Supabase environment-variable resolution, and the safe
+lazy LLM startup:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+### 5. Deploy to Streamlit Community Cloud (Optional)
+
+1. Push this repository to GitHub and create an app at share.streamlit.io
+   with `app.py` as the entry point.
+2. In the app's **Settings → Secrets**, paste your keys in TOML form:
+   ```toml
+   GEMINI_API_KEY = "your-google-gemini-api-key"
+   SUPABASE_URL = "https://[PROJECT-REF].supabase.co"
+   SUPABASE_KEY = "your-publishable-or-service-role-key"
+   ```
+   `app.py` automatically bridges these secrets into environment variables,
+   so no code changes are needed.
+
 ---
 
 ## Backend API Reference
@@ -149,4 +175,4 @@ jupyter notebook chatbot_workflow.ipynb
 
 ## License
 
-This project is open-source and available under the MIT License.
+This project is open-source and available under the MIT License (see `LICENSE`).

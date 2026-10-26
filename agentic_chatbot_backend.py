@@ -57,7 +57,14 @@ def get_llm(model_provider: str = "auto"):
         )
 
 
-llm = get_llm()
+# Initialize lazily-tolerated: importing this module must not crash when no
+# API key is configured yet (e.g. during testing or first-time setup).
+# The error is raised only when a chat call is actually made.
+llm = None
+try:
+    llm = get_llm()
+except ValueError as exc:
+    logger.warning(f"{exc} Chat calls will fail until a key is configured.")
 
 
 # ---------------------------------------------------------------------------
@@ -188,6 +195,10 @@ class ChatState(TypedDict):
 
 def chat_node(state: ChatState):
     """Core chat node that queries the model with conversation messages."""
+    if llm is None:
+        raise ValueError(
+            "No LLM configured. Set GEMINI_API_KEY or OPENAI_API_KEY in your .env file."
+        )
     response = llm.invoke(state["messages"])
     return {"messages": [response]}
 
@@ -283,7 +294,7 @@ if __name__ == "__main__":
     print(f"\n--- Agentic Chatbot Backend Initialized ---")
     print(f"Checkpointer Storage Mode: {checkpointer_type.upper()}")
     print(f"Supabase REST Client: {'Configured' if supabase_client else 'Not configured (Optional)'}")
-    print(f"LLM: {llm.__class__.__name__}")
+    print(f"LLM: {llm.__class__.__name__ if llm is not None else 'NOT CONFIGURED (set an API key)'}")
     print("-------------------------------------------\n")
 
     test_thread = "cli-test-supabase-thread"
