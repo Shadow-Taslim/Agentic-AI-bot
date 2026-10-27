@@ -11,6 +11,7 @@ A stateful, multi-turn AI chatbot backend built with **LangGraph**, **Google Gem
 - **Supabase REST Chat Logging**: Every user/assistant exchange is logged to a `chat_messages` table via the Supabase REST client (see `supabase_schema.sql`).
 - **Graceful In-Memory Fallback**: Automatically falls back to in-memory storage (`MemorySaver`) if Supabase is not configured, enabling zero-friction local development.
 - **Multi-Model Support**: Primary support for Google Gemini (`gemini-2.5-flash`), with built-in fallback to OpenAI (`gpt-4o-mini`).
+- **Two Frontends**: Streamlit (`app.py`) for rapid demos, and a FastAPI + HTML/JS web chat UI (`api.py` + `frontend/`) for a classic web-app feel.
 - **Streaming Response**: Yields token-by-token chunks compatible with Streamlit (`st.write_stream`) and web interfaces.
 - **Multi-Turn Session Memory**: Thread-based conversation tracking (`thread_id`), allowing separate user sessions to maintain their individual histories.
 - **Safe Startup**: Importing the backend never crashes on missing API keys; a clear error is raised only when a chat call is made without configuration.
@@ -23,6 +24,8 @@ A stateful, multi-turn AI chatbot backend built with **LangGraph**, **Google Gem
 AgenticAi/
 ├── agentic_chatbot_backend.py   # Core LangGraph graph, LLM routing, and Supabase checkpointer
 ├── app.py                       # Streamlit web frontend interface
+├── api.py                       # FastAPI server: JSON API + serves the web frontend
+├── frontend/index.html          # Web chat UI (vanilla HTML/CSS/JS, no build step)
 ├── chatbot_workflow.ipynb       # Interactive prototyping notebook for graph experimentation
 ├── supabase_schema.sql          # One-time SQL: chat_messages table + index + RLS policies
 ├── tests/test_backend.py        # Unit tests (no API keys or network required)
@@ -54,7 +57,7 @@ pip install -r requirements.txt
 Or install them directly:
 ```bash
 pip install langgraph langchain-core langchain-google-genai langchain-openai python-dotenv streamlit
-pip install langgraph-checkpoint-postgres "psycopg[binary,pool]" supabase
+pip install langgraph-checkpoint-postgres "psycopg[binary,pool]" supabase fastapi "uvicorn[standard]"
 ```
 
 ---
@@ -123,6 +126,26 @@ Start the interactive chat UI:
 ```bash
 streamlit run app.py
 ```
+
+### 2b. Launch the Web Frontend (FastAPI + HTML/JS)
+
+Prefer a classic web app? A dark-themed chat frontend ships in `frontend/`
+and is served by the FastAPI server — no Node.js or build step needed:
+
+```bash
+uvicorn api:app --reload --port 8000
+```
+
+Open **http://localhost:8000** in your browser.
+
+The same server exposes a JSON API:
+
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `/api/chat` | POST | Body `{"message": "...", "thread_id": "optional"}` → `{"reply", "thread_id"}` |
+| `/api/history?thread_id=...` | GET | Full message history for a thread |
+| `/api/health` | GET | LLM / Supabase / checkpointer status |
+| `/docs` | GET | Auto-generated Swagger API docs |
 
 ### 3. Prototyping with Jupyter Notebook
 
