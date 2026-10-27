@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Agentic AI Chatbot</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --panel: #171a23;
+    --panel-2: #1e2230;
+    --border: #2a2f3f;
+    --text: #e8eaf1;
+    --muted: #8b92a8;
+    --accent: #6c8cff;
+    --accent-2: #8a6cff;
+    --user-bubble: linear-gradient(135deg, #6c8cff, #8a6cff);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    background: var(--bg); color: var(--text);
+    height: 100vh; display: flex; overflow: hidden;
+  }
+
+  /* ---------- Sidebar ---------- */
+  aside {
+    width: 260px; min-width: 260px; background: var(--panel);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; padding: 20px 16px; gap: 16px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 700; }
+  .brand span { font-size: 26px; }
+  #new-chat {
+    background: var(--accent); color: #fff; border: none; border-radius: 10px;
+    padding: 11px 14px; font-size: 14px; font-weight: 600; cursor: pointer;
+    transition: filter .15s;
+  }
+  #new-chat:hover { filter: brightness(1.15); }
+  .thread-box { font-size: 12px; color: var(--muted); word-break: break-all; line-height: 1.6; }
+  .thread-box code { color: var(--accent); }
+  #status { margin-top: auto; font-size: 12px; color: var(--muted); display: flex; gap: 7px; align-items: center; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #666; display: inline-block; }
+  .dot.ok { background: #3ecf8e; }
+  .dot.bad { background: #ff6b6b; }
+
+  /* ---------- Main chat ---------- */
+  main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  header {
+    padding: 16px 24px; border-bottom: 1px solid var(--border);
+    background: var(--panel); font-weight: 600;
+  }
+  header small { display: block; color: var(--muted); font-weight: 400; margin-top: 2px; }
+  #messages {
+    flex: 1; overflow-y: auto; padding: 24px;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .msg { max-width: 75%; padding: 12px 16px; border-radius: 16px; line-height: 1.55;
+         font-size: 15px; white-space: pre-wrap; word-break: break-word; }
+  .msg.user { align-self: flex-end; background: var(--user-bubble); color: #fff;
+              border-bottom-right-radius: 4px; }
+  .msg.assistant { align-self: flex-start; background: var(--panel-2);
+                   border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+  .msg.error { background: #3a2026; border: 1px solid #6b2f3a; color: #ffb3b3;
+               align-self: flex-start; border-radius: 12px; }
+  .typing { align-self: flex-start; display: flex; gap: 5px; padding: 14px 18px;
+            background: var(--panel-2); border: 1px solid var(--border); border-radius: 16px; }
+  .typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted);
+              animation: blink 1.2s infinite; }
+  .typing i:nth-child(2) { animation-delay: .2s; }
+  .typing i:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%, 60%, 100% { opacity: .25; } 30% { opacity: 1; } }
+  #empty { margin: auto; text-align: center; color: var(--muted); }
+  #empty h2 { color: var(--text); margin-bottom: 8px; font-weight: 600; }
+
+  /* ---------- Composer ---------- */
+  #composer { display: flex; gap: 12px; padding: 16px 24px; border-top: 1px solid var(--border);
+              background: var(--panel); }
+  #input {
+    flex: 1; resize: none; background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 12px; padding: 13px 16px;
+    font-size: 15px; font-family: inherit; max-height: 140px; outline: none;
+  }
+  #input:focus { border-color: var(--accent); }
+  #send {
+    background: var(--accent); color: #fff; border: none; border-radius: 12px;
+    padding: 0 22px; font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  #send:disabled { opacity: .5; cursor: not-allowed; }
+
+  @media (max-width: 720px) {
+    aside { display: none; }
+    .msg { max-width: 90%; }
+  }
+</style>
+</head>
+<body>
+
+<aside>
+  <div class="brand"><span>🤖</span> Agentic AI</div>
+  <button id="new-chat">＋ New conversation</button>
+  <div class="thread-box">
+    Thread ID<br />
+    <code id="thread-id">—</code><br /><br />
+    Conversations persist in Supabase when configured; otherwise they live in
+    memory for the current server run.
+  </div>
+  <div id="status"><span class="dot" id="status-dot"></span><span id="status-text">Checking…</span></div>
+</aside>
+
+<main>
+  <header>
+    Agentic AI Chatbot
+    <small>LangGraph · Gemini / OpenAI · Supabase memory</small>
+  </header>
+
+  <div id="messages">
+    <div id="empty">
+      <h2>Start a conversation</h2>
+      <p>Ask anything — the bot remembers the thread across turns.</p>
+    </div>
+  </div>
+
+  <form id="composer">
+    <textarea id="input" rows="1" placeholder="Type a message…  (Enter to send, Shift+Enter for newline)"></textarea>
+    <button id="send" type="submit">Send</button>
+  </form>
+</main>
+
+<script>
+const messagesEl = document.getElementById("messages");
+const emptyEl = document.getElementById("empty");
+const inputEl = document.getElementById("input");
+const sendEl = document.getElementById("send");
+const threadEl = document.getElementById("thread-id");
+
+let threadId = localStorage.getItem("agentic_thread_id");
+let sending = false;
+
+function setThread(id) {
+  threadId = id;
+  threadEl.textContent = id || "—";
+  if (id) localStorage.setItem("agentic_thread_id", id);
+}
+
+function addMessage(role, text) {
+  if (emptyEl) emptyEl.remove();
+  const div = document.createElement("div");
+  div.className = "msg " + role;
+  div.textContent = text;               // textContent = no HTML injection
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  return div;
+}
+
+function showTyping() {
+  const div = document.createElement("div");
+  div.className = "typing";
+  div.id = "typing";
+  div.innerHTML = "<i></i><i></i><i></i>";
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function hideTyping() {
+  const t = document.getElementById("typing");
+  if (t) t.remove();
+}
+
+async function loadHistory() {
+  if (!threadId) return;
+  try {
+    const res = await fetch("/api/history?thread_id=" + encodeURIComponent(threadId));
+    if (!res.ok) return;
+    const data = await res.json();
+    for (const m of data.messages) addMessage(m.role, m.content);
+  } catch (_) { /* history is best-effort */ }
+}
+
+async function checkHealth() {
+  const dot = document.getElementById("status-dot");
+  const text = document.getElementById("status-text");
+  try {
+    const res = await fetch("/api/health");
+    const data = await res.json();
+    const ok = data.llm_configured;
+    dot.className = "dot " + (ok ? "ok" : "bad");
+    text.textContent = ok
+      ? "Online · " + data.checkpointer
+      : "API key missing on server";
+  } catch (_) {
+    dot.className = "dot bad";
+    text.textContent = "Server unreachable";
+  }
+}
+
+async function sendMessage(text) {
+  sending = true;
+  sendEl.disabled = true;
+  addMessage("user", text);
+  showTyping();
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text, thread_id: threadId }),
+    });
+    const data = await res.json();
+    hideTyping();
+    if (!res.ok) {
+      addMessage("error", data.detail || "Request failed (" + res.status + ")");
+    } else {
+      setThread(data.thread_id);
+      addMessage("assistant", data.reply);
+    }
+  } catch (err) {
+    hideTyping();
+    addMessage("error", "Network error: " + err.message);
+  } finally {
+    sending = false;
+    sendEl.disabled = false;
+    inputEl.focus();
+  }
+}
+
+document.getElementById("composer").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const text = inputEl.value.trim();
+  if (!text || sending) return;
+  inputEl.value = "";
+  inputEl.style.height = "auto";
+  sendMessage(text);
+});
+
+inputEl.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendEl.click();
+  }
+});
+
+inputEl.addEventListener("input", () => {
+  inputEl.style.height = "auto";
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 140) + "px";
+});
+
+document.getElementById("new-chat").addEventListener("click", () => {
+  localStorage.removeItem("agentic_thread_id");
+  setThread(null);
+  messagesEl.innerHTML = "";
+  inputEl.focus();
+});
+
+setThread(threadId);
+loadHistory();
+checkHealth();
+</script>
+</body>
+</html>
